@@ -53,6 +53,11 @@ def analyze_error_with_ai(code: str, traceback_str: str) -> List[int]:
     api_key = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
 
+    numbered_code_lines = []
+    for i, line in enumerate(code.splitlines(), start=1):
+        numbered_code_lines.append(f"{i}: {line}")
+    numbered_code = "\n".join(numbered_code_lines)
+
     prompt = f"""
       Analyze this Python code and its error traceback.
       Identify the line number(s) where the error occurred.
