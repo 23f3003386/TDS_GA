@@ -3,6 +3,7 @@ import sys
 import traceback
 from io import StringIO
 from typing import List
+import re
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,32 +51,32 @@ def execute_python_code(code: str) -> dict:
     sys.stdout = old_stdout
   
 def analyze_error_with_ai(code: str, traceback_str: str) -> List[int]:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    client = genai.Client(api_key=api_key)
+    matches = re.findall(r"line (\d+)", traceback_str)
+    if matches:
+        exact_line = int(matches[-1])
+        if exact_line <= len(code.splitlines()):
+            return [exact_line]
 
-    numbered_code_lines = []
-    for i, line in enumerate(code.splitlines(), start=1):
-        numbered_code_lines.append(f"{i}: {line}")
-    numbered_code = "\n".join(numbered_code_lines)
+    try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        client = genai.Client(api_key=api_key)
+        
+
+        numbered_code_lines = []
+        for i, line in enumerate(code.splitlines(), start=1):
+            numbered_code_lines.append(f"{i}: {line}")
+        numbered_code = "\n".join(numbered_code_lines)
 
     prompt = f"""
-        You are an expert Python code analyzer. Your strict job is to find the exact line number(s) where the execution failed based on the provided traceback.
+        You are an expert Python code analyzer. Identify the exact line number(s) where the execution failed based on the provided traceback.
         
-        Here is the Python code with explicit line numbers format (LineNumber: Code):
-        [START_CODE]
+        CODE:
         {numbered_code}
-        [END_CODE]
         
-        Here is the exact runtime error traceback:
-        [START_TRACEBACK]
+        TRACEBACK:
         {traceback_str}
-        [END_TRACEBACK]
         
-        CRITICAL RULES:
-        1. Look at the traceback, find the line that caused the error.
-        2. Match it with the line numbers provided in [START_CODE] and [END_CODE].
-        3. Return the exact line number(s) as integers inside the "error_lines" array.
-        4. Do not invent line numbers. If line 3 caused the error, return [3].
+        Return the exact line number(s) as integers inside the "error_lines" array.
         """
     response = client.models.generate_content(
         model="gemini-2.0-flash-exp",
@@ -96,6 +97,9 @@ def analyze_error_with_ai(code: str, traceback_str: str) -> List[int]:
     )
     result = ErrorAnalysis.model_validate_json(response.text)
     return result.error_lines
+
+    except Exception:
+        return []
 
 @app.post("/code-interpreter", response_model=InterpreterResponse)
 async def code_interpreter(payload: InterpreterRequest):
