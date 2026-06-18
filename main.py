@@ -59,17 +59,24 @@ def analyze_error_with_ai(code: str, traceback_str: str) -> List[int]:
     numbered_code = "\n".join(numbered_code_lines)
 
     prompt = f"""
-      Analyze this Python code and its error traceback.
-      Identify the line number(s) where the error occurred.
-      
-      CODE:
-      {code}
-      
-      TRACEBACK:
-      {traceback_str}
-      
-      Return the line number(s) where the error is located.
-      """
+        You are an expert Python code analyzer. Your strict job is to find the exact line number(s) where the execution failed based on the provided traceback.
+        
+        Here is the Python code with explicit line numbers format (LineNumber: Code):
+        [START_CODE]
+        {numbered_code}
+        [END_CODE]
+        
+        Here is the exact runtime error traceback:
+        [START_TRACEBACK]
+        {traceback_str}
+        [END_TRACEBACK]
+        
+        CRITICAL RULES:
+        1. Look at the traceback, find the line that caused the error.
+        2. Match it with the line numbers provided in [START_CODE] and [END_CODE].
+        3. Return the exact line number(s) as integers inside the "error_lines" array.
+        4. Do not invent line numbers. If line 3 caused the error, return [3].
+        """
     response = client.models.generate_content(
         model="gemini-2.0-flash-exp",
         contents=prompt,
