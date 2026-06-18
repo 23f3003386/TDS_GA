@@ -67,36 +67,36 @@ def analyze_error_with_ai(code: str, traceback_str: str) -> List[int]:
             numbered_code_lines.append(f"{i}: {line}")
         numbered_code = "\n".join(numbered_code_lines)
 
-    prompt = f"""
-        You are an expert Python code analyzer. Identify the exact line number(s) where the execution failed based on the provided traceback.
-        
-        CODE:
-        {numbered_code}
-        
-        TRACEBACK:
-        {traceback_str}
-        
-        Return the exact line number(s) as integers inside the "error_lines" array.
-        """
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-exp",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "error_lines": types.Schema(
-                        type=types.Type.ARRAY,
-                        items=types.Schema(type=types.Type.INTEGER),
-                    )
-                },
-                required=["error_lines"],
+        prompt = f"""
+            You are an expert Python code analyzer. Identify the exact line number(s) where the execution failed based on the provided traceback.
+            
+            CODE:
+            {numbered_code}
+            
+            TRACEBACK:
+            {traceback_str}
+            
+            Return the exact line number(s) as integers inside the "error_lines" array.
+            """
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "error_lines": types.Schema(
+                            type=types.Type.ARRAY,
+                            items=types.Schema(type=types.Type.INTEGER),
+                        )
+                    },
+                    required=["error_lines"],
+                ),
             ),
-        ),
-    )
-    result = ErrorAnalysis.model_validate_json(response.text)
-    return result.error_lines
+        )
+        result = ErrorAnalysis.model_validate_json(response.text)
+        return result.error_lines
 
     except Exception:
         return []
