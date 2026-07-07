@@ -1,42 +1,45 @@
-import uuid
-import time
-from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-import statistics
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import jwt
 
 app = FastAPI()
 
-# Strict CORS Policy
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://dash-j1ukwz.example.com"],
-    allow_methods=["GET", "OPTIONS"],
-    allow_headers=["*"],
-)
+# The RS256 Public Key provided
+PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2okOHspNjgA+2rTLbeuY
+cxiP/hG8C6Sb9iwg3yiLAA4HCnpITcbWCSelbvbYGuc3EbNy4xFyf5Cbj5DHJMID
+EkryOgyd2giIIIBOUBj8S63uGcnRpOBh9NFatfNwheKuzsPuVNldu6A9cNteNpXc
+WyJjG2axVfmq7i6SuKr1JoWYG7xTTAvKPujSl4OtsQfO3h5NepzdfXpr28oNnzfW
+ed+zclR6BcmNNo/WVfJ4xyCLSf0BCOgdTgW6PdaChd1l9VDetJZVEgC5tkyvXsfI
+SI6iyrYbKR0NEBSqq4XkadEjsCs4F1RncsS4LlgniT7GlkL9Mce3b0wGLs9/7ZIX
+dQIDAQAB
+-----END PUBLIC KEY-----"""
 
-# Custom Middleware for Headers
-@app.middleware("http")
-async def add_custom_headers(request: Request, call_next):
-    start_time = time.perf_counter()
-    response = await call_next(request)
-    process_time = time.perf_counter() - start_time
-    
-    response.headers["X-Request-ID"] = str(uuid.uuid4())
-    # Format process time to a clean decimal string
-    response.headers["X-Process-Time"] = f"{process_time:.6f}"
-    return response
+ISSUER = "https://idp.exam.local"
+AUDIENCE = "tds-vvhjltla.apps.exam.local"
 
-@app.get("/stats")
-async def get_stats(values: str):
-    # Parse input
-    nums = [float(x) for x in values.split(",")]
-    
-    # Calculate statistics
-    return {
-        "email": "23f3003386@ds.study.iitm.ac.in",
-        "count": len(nums),
-        "sum": sum(nums),
-        "min": min(nums),
-        "max": max(nums),
-        "mean": sum(nums) / len(nums)
-    }
+class TokenRequest(BaseModel):
+    token: str
+
+@app.post("/verify")
+async def verify_token(req: TokenRequest):
+    try:
+        # PyJWT handles signature, issuer, audience, and exp validation automatically
+        payload = jwt.decode(
+            req.token, 
+            PUBLIC_KEY, 
+            algorithms=["RS256"],
+            audience=AUDIENCE,
+            issuer=ISSUER
+        )
+        
+        return {
+            "valid": True,
+            "email": payload.get("email"),
+            "sub": payload.get("sub"),
+            "aud": payload.get("aud")
+        }
+    except jwt.PyJWTError:
+        # Return 401 with the required structure for invalid tokens
+        return JSONResponse(status_code=401, content={"valid": False})
