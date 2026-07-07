@@ -67,6 +67,6 @@ async def request_context_middleware(request: Request, call_next):
 @app.get("/ping")
 async def ping(request: Request):
     return {
-        "email": "musa@example.com", # Burayı kendi adresinle değiştir
+        "email": "23f3003386@ds.study.iitm.ac.in", # Grader'ın beklediği tam adres
         "request_id": request.state.request_id
     }
