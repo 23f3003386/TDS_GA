@@ -22,22 +22,24 @@ idempotency_store: Dict[str, dict] = {} # Key -> Order
 rate_limit_store: Dict[str, List[float]] = {} # ClientID -> List of timestamps
 
 # --- Pattern 1: Idempotent POST ---
-@app.post("/orders", status_code=201)
+from fastapi.responses import JSONResponse
+
+# Dekoratörü değiştir: status_code=201'i SİL
+@app.post("/orders") 
 async def create_order(request: Request, idempotency_key: str = Header(..., alias="Idempotency-Key")):
     
-    # 1. Eğer anahtar zaten varsa, YENİSİNİ YARATMA, eskisini döndür
+    # 1. Kontrol: Daha önce yaratıldı mı?
     if idempotency_key in idempotency_store:
-        # Eski siparişi döndür ve 200 (veya 201) dön.
-        # Grader genellikle aynı order ID'yi görmeyi bekler.
-        return idempotency_store[idempotency_key]
+        print(f"DEBUG: Idempotency hit! Key: {idempotency_key}") # Loglara düşecek
+        return JSONResponse(status_code=200, content=idempotency_store[idempotency_key])
     
-    # 2. Eğer anahtar yoksa, İLK KEZ yarat
-    new_order = {"id": f"ord_{len(idempotency_store) + 1}", "status": "created", "key": idempotency_key}
-    
-    # Depoya kaydet
+    # 2. Yeni Yaratım
+    new_order = {"id": f"ord_{len(idempotency_store) + 1}", "status": "created"}
     idempotency_store[idempotency_key] = new_order
     
-    return new_order
+    print(f"DEBUG: New order created! Key: {idempotency_key}")
+    
+    return JSONResponse(status_code=201, content=new_order)
 # --- Pattern 2: Cursor Pagination ---
 @app.get("/orders")
 async def get_orders(limit: int = 10, cursor: Optional[int] = 0):
