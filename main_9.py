@@ -6,56 +6,46 @@ from collections import defaultdict
 
 app = FastAPI()
 
-# 1. CORS Middleware (En Dış Katman - Preflight isteklerini karşılar)
-origins = [
-    "https://app-avashw.example.com",
-    "https://exam.sanand.workers.dev/"
-]
-
+# 1. CORS (En dış katman - Preflight'ı bu karşılamalı)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["https://app-avashw.example.com"], # Buraya sınavın URL'ini yaz
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID"] # Grader'ın header'ı okuması için şart!
+    expose_headers=["X-Request-ID"]
 )
 
-# Rate Limit Deposu (Per-client)
+# Rate Limit Deposu
 rate_limits = defaultdict(list)
 
-# 2. Rate Limit Middleware
+# 2. Rate Limiter (OPTIONS isteğini gördüğünde direkt pas geçmeli)
 @app.middleware("http")
 async def rate_limiter_middleware(request: Request, call_next):
+    # Eğer ön kontrol (OPTIONS) ise hiç dokunma, direkt bir sonraki adıma geç
+    if request.method == "OPTIONS":
+        return await call_next(request)
+        
     client_id = request.headers.get("X-Client-Id")
-    
     if client_id:
         now = time.time()
-        # 10 saniyelik pencereyi temizle
         rate_limits[client_id] = [t for t in rate_limits[client_id] if now - t < 10]
         
         if len(rate_limits[client_id]) >= 15:
-            # Hata durumunda da ID dönmek için (gradyer isterse)
             return Response(status_code=429, content="Too Many Requests")
         
         rate_limits[client_id].append(now)
     
     return await call_next(request)
 
-# 3. Request Context Middleware (Endpoint'ten Önce Çalışır)
+# 3. Request Context (En iç katman - İş mantığından hemen önce)
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
-    # ID'yi belirle
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-    
-    # State'i Endpoint çalışmadan ÖNCE set et (AttributeError'ı önler)
     request.state.request_id = request_id
     
-    # İsteği işleme al
     response = await call_next(request)
     
-    # Cevaba Header'ı ekle
     response.headers["X-Request-ID"] = request_id
-    
     return response
 
 # Endpoint
