@@ -2,7 +2,10 @@ import os
 import yaml
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import dotenv_values
+from dotenv import load_dotenv
+
+# .env dosyasını sisteme yükle (Böylece os.environ'da görünecekler)
+load_dotenv() 
 
 app = FastAPI()
 
@@ -18,15 +21,13 @@ def str_to_bool(val):
     return str(val).lower() in ('true', '1', 'yes', 'on')
 
 def cast_value(key, value):
-    if key in ["port", "workers"]:
-        return int(value)
-    if key == "debug":
-        return str_to_bool(value)
+    if key in ["port", "workers"]: return int(value)
+    if key == "debug": return str_to_bool(value)
     return str(value)
 
 @app.get("/effective-config")
 def get_effective_config(set: list[str] = Query([])):
-    # 1. Layer: Defaults
+    # 1. LAYER: Defaults
     config = {
         "port": 8000,
         "workers": 1,
@@ -35,25 +36,21 @@ def get_effective_config(set: list[str] = Query([])):
         "api_key": "default-secret-000"
     }
 
-    # 2. Layer: YAML (config.development.yaml)
+    # 2. LAYER: YAML (config.development.yaml)
     if os.path.exists("config.development.yaml"):
         with open("config.development.yaml", "r") as f:
             yaml_config = yaml.safe_load(f) or {}
-            for k, v in yaml_config.items():
-                config[k] = v
+            config.update(yaml_config)
 
-    # 3. Layer: .env
-    env_vars = dotenv_values(".env")
-    # Alias Handling
-    if "NUM_WORKERS" in env_vars:
-        config["workers"] = int(env_vars["NUM_WORKERS"])
-    # Generic mapping
-    for k, v in env_vars.items():
-        if k == "APP_LOG_LEVEL": config["log_level"] = v
-        # Diğerlerini de ihtiyaca göre buraya ekleyebilirsin
+    # 3. LAYER: .env File (Yüklenen değerleri kontrol et)
+    # Alias Handling: .env içindeki NUM_WORKERS -> workers
+    if os.getenv("NUM_WORKERS"):
+        config["workers"] = int(os.getenv("NUM_WORKERS"))
+    if os.getenv("APP_LOG_LEVEL"):
+        config["log_level"] = os.getenv("APP_LOG_LEVEL")
 
-    # 4. Layer: OS Environment Variables (APP_* prefix) - HIGHER PRECEDENCE
-    # APP_PORT -> port, APP_WORKERS -> workers, APP_DEBUG -> debug, APP_LOG_LEVEL -> log_level, APP_API_KEY -> api_key
+    # 4. LAYER: OS Environment Variables (APP_* prefix - Higher Precedence)
+    # Bu katman .env'den gelenleri ezer.
     mapping = {
         "APP_PORT": "port",
         "APP_WORKERS": "workers",
@@ -62,16 +59,17 @@ def get_effective_config(set: list[str] = Query([])):
         "APP_API_KEY": "api_key"
     }
     for env_key, config_key in mapping.items():
-        if env_key in os.environ:
-            config[config_key] = cast_value(config_key, os.environ[env_key])
+        val = os.getenv(env_key)
+        if val is not None:
+            config[config_key] = cast_value(config_key, val)
 
-    # 5. Layer: CLI Overrides (Highest Precedence)
+    # 5. LAYER: CLI/Query Overrides (Highest Precedence)
     for pair in set:
         if "=" in pair:
             key, value = pair.split("=", 1)
             config[key] = cast_value(key, value)
 
-    # Secret Masking
+    # Masking
     config["api_key"] = "****"
 
     return config
