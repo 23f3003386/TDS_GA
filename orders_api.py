@@ -10,11 +10,11 @@ app = FastAPI()
 # --- CORS Ayarları ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=["*"], # Her yerden gelen isteğe izin ver
+    allow_credentials=True,
+    allow_methods=["*"], # POST, GET, OPTIONS her şeye izin ver
     allow_headers=["*"],
 )
-
 # --- Veri Yapıları (In-memory) ---
 # T=48
 CATALOG = [{"id": i, "name": f"Order {i}"} for i in range(1, 49)]
