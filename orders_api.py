@@ -8,11 +8,28 @@ from pydantic import BaseModel
 app = FastAPI()
 
 # --- CORS Ayarları ---
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+app = FastAPI()
+
+# 1. En kapsamlı CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Her yerden gelen isteğe izin ver
-    allow_methods=["*"], # POST, GET, OPTIONS her şeye izin ver
+    allow_origins=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"], # Bunu ekle, headerların görünürlüğünü garantiye al
+)
+
+# 2. Eğer hata alırsan her response'a header basan bir middleware (Sigorta)
+@app.middleware("http")
+async def add_cors_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 )
 # --- Veri Yapıları (In-memory) ---
 # T=48
