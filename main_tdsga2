@@ -1,42 +1,123 @@
-import uuid
-import time
-from fastapi import FastAPI, Request, Response
+import os
+import sys
+import traceback
+from io import StringIO
+from typing import List
+import re
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import statistics
+from pydantic import BaseModel
 
-app = FastAPI()
+from google import genai
+from google.genai import types
 
-# Strict CORS Policy
+app = FastAPI(title="AI-Powered Code Interpreter Service")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://dash-j1ukwz.example.com"],
-    allow_methods=["GET", "OPTIONS"],
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],  
     allow_headers=["*"],
 )
 
-# Custom Middleware for Headers
-@app.middleware("http")
-async def add_custom_headers(request: Request, call_next):
-    start_time = time.perf_counter()
-    response = await call_next(request)
-    process_time = time.perf_counter() - start_time
-    
-    response.headers["X-Request-ID"] = str(uuid.uuid4())
-    # Format process time to a clean decimal string
-    response.headers["X-Process-Time"] = f"{process_time:.6f}"
-    return response
+class InterpreterRequest(BaseModel):
+    code: str
 
-@app.get("/stats")
-async def get_stats(values: str):
-    # Parse input
-    nums = [float(x) for x in values.split(",")]
-    
-    # Calculate statistics
-    return {
-        "email": "23f3003386@ds.study.iitm.ac.in",
-        "count": len(nums),
-        "sum": sum(nums),
-        "min": min(nums),
-        "max": max(nums),
-        "mean": sum(nums) / len(nums)
-    }
+
+class InterpreterResponse(BaseModel):
+    error: List[int]
+    result: str
+
+
+class ErrorAnalysis(BaseModel):
+    error_lines: List[int]
+
+def execute_python_code(code: str) -> dict:
+  local_vars = {}
+
+  old_stdout = sys.stdout
+  sys.stdout = StringIO()
+
+  try:
+    exec(code, {}, local_vars)
+    output = sys.stdout.getvalue()
+    return {"success": True, "output": output}
+  except Exception as e:
+    output = traceback.format_exc()
+    return {"success": False, "output": output}
+  finally:
+    sys.stdout = old_stdout
+  
+def analyze_error_with_ai(code: str, traceback_str: str) -> List[int]:
+    matches = re.findall(r"line (\d+)", traceback_str)
+    if matches:
+        exact_line = int(matches[-1])
+        if exact_line <= len(code.splitlines()):
+            return [exact_line]
+
+    try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        client = genai.Client(api_key=api_key)
+        
+
+        numbered_code_lines = []
+        for i, line in enumerate(code.splitlines(), start=1):
+            numbered_code_lines.append(f"{i}: {line}")
+        numbered_code = "\n".join(numbered_code_lines)
+
+        prompt = f"""
+            You are an expert Python code analyzer. Identify the exact line number(s) where the execution failed based on the provided traceback.
+            
+            CODE:
+            {numbered_code}
+            
+            TRACEBACK:
+            {traceback_str}
+            
+            Return the exact line number(s) as integers inside the "error_lines" array.
+            """
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "error_lines": types.Schema(
+                            type=types.Type.ARRAY,
+                            items=types.Schema(type=types.Type.INTEGER),
+                        )
+                    },
+                    required=["error_lines"],
+                ),
+            ),
+        )
+        result = ErrorAnalysis.model_validate_json(response.text)
+        return result.error_lines
+
+    except Exception:
+        return []
+
+@app.post("/code-interpreter", response_model=InterpreterResponse)
+async def code_interpreter(payload: InterpreterRequest):
+
+    execution_result = execute_python_code(payload.code)
+
+    if execution_result["success"]:
+        # Kod sorunsuz çalıştıysa AI'ı boşuna ÇAĞIRMIYORUZ (AI Only When Needed kuralı)
+        return InterpreterResponse(error=[], result=execution_result["output"])
+
+    try:
+        error_lines = analyze_error_with_ai(
+            code=payload.code, traceback_str=execution_result["output"]
+        )
+    except Exception:
+        error_lines = []
+
+    return InterpreterResponse(
+        error=error_lines, result=execution_result["output"]
+    )
+
