@@ -30,7 +30,7 @@ async def add_cors_header(request: Request, call_next):
     response.headers["Access-Control-Allow-Methods"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "*"
     return response
-)
+
 # --- Veri Yapıları (In-memory) ---
 # T=48
 CATALOG = [{"id": i, "name": f"Order {i}"} for i in range(1, 49)]
