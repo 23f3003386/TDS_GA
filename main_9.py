@@ -49,16 +49,17 @@ async def rate_limiter_middleware(request: Request, call_next):
 # 3. Request Context Middleware
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
-    # ID al veya üret
+    # 1. ID'yi belirle
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     
-    # İsteği ilerlet
+    # 2. STATE'İ ÖNCE SET ET (Endpoint bunun sayesinde okuyabilecek)
+    request.state.request_id = request_id
+    
+    # 3. İsteği endpoint'e gönder
     response = await call_next(request)
     
-    # Cevaba header'ı ekle
+    # 4. Header'ı cevaba ekle
     response.headers["X-Request-ID"] = request_id
-    # Request state'ine ekleyelim ki endpoint'te kullanalım
-    request.state.request_id = request_id
     
     return response
 
