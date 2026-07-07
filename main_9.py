@@ -6,11 +6,18 @@ from collections import defaultdict
 
 app = FastAPI()
 
+@app.middleware("http")
+async def debug_headers(request: Request, call_next):
+    # Sadece OPTIONS isteklerini izleyelim
+    if request.method == "OPTIONS":
+        print(f"DEBUG: OPTIONS Request from Origin: {request.headers.get('origin')}")
+    return await call_next(request)
+
 # 1. CORS Middleware (En Dış Katman)
 # Exam page origin'i buraya eklemeyi unutma, yoksa grader seni reddeder.
 origins = [
     "https://app-avashw.example.com",
-    "https://grader-domain.example.com" # Buraya sınav sayfasının URL'ini ekle
+    "https://exam.sanand.workers.dev" # Buraya sınav sayfasının URL'ini ekle
 ]
 
 app.add_middleware(
