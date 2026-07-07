@@ -8,7 +8,8 @@ app = FastAPI()
 
 # 1. CORS Middleware (En Dış Katman - Preflight isteklerini karşılar)
 origins = [
-    "https://app-avashw.example.com"
+    "https://app-avashw.example.com",
+    "https://exam.sanand.workers.dev/"
 ]
 
 app.add_middleware(
